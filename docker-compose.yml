@@ -1,0 +1,42 @@
+services:
+  voice-pipeline:
+    build:
+      context: .
+    command: uvicorn voice_pipeline.app:create_app --factory --host 0.0.0.0 --port 8001
+    env_file:
+      - .env.voice
+    volumes:
+      - .:/app
+    ports:
+      - "8001:8001"
+    depends_on:
+      - xtts
+    networks:
+      - voice-net
+
+  xtts:
+    build:
+      context: .
+      dockerfile: docker/xtts/Dockerfile
+    ports:
+      - "8002:5002"
+    environment:
+      - TTS_MODEL_PATH=/opt/xtts
+      - COQUI_TOS_AGREED=1
+      - TORCH_NUM_THREADS=4
+      - OMP_NUM_THREADS=4
+      - MKL_NUM_THREADS=4
+    volumes:
+      - ./docker/xtts/server.py:/app/server.py
+    networks:
+      - voice-net
+    healthcheck:
+      test: [ "CMD-SHELL", "python -c \"import requests; requests.get('http://localhost:5002/health', timeout=5)\"" ]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+networks:
+  voice-net:
+    driver: bridge

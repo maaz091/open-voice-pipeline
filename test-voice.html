@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Pipeline Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #connectBtn {
+            background: #4caf50;
+            color: white;
+        }
+
+        #disconnectBtn {
+            background: #f44336;
+            color: white;
+        }
+
+        #interruptBtn {
+            background: #ff9800;
+            color: white;
+        }
+
+        #startRecording {
+            background: #2196f3;
+            color: white;
+        }
+
+        #stopRecording {
+            background: #f44336;
+            color: white;
+        }
+
+        #status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        #status.idle {
+            background: #9e9e9e;
+            color: white;
+        }
+
+        #status.listening {
+            background: #ffeb3b;
+            color: #333;
+            animation: pulse 2s infinite;
+        }
+
+        #status.speaking {
+            background: #4caf50;
+            color: white;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .section {
+            margin-bottom: 25px;
+        }
+
+        .section h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        #transcript, #response {
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            min-height: 80px;
+            background: #f9f9f9;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        #response {
+            font-family: 'Courier New', monospace;
+            background: #f5f5f5;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Voice Pipeline Test</h1>
+        <p class="subtitle">Test the STT → LLM → TTS pipeline with real-time voice interaction</p>
+
+        <div class="button-group">
+            <button id="connectBtn">🔌 Connect</button>
+            <button id="disconnectBtn" disabled>❌ Disconnect</button>
+            <button id="interruptBtn" disabled>⏸️ Interrupt</button>
+        </div>
+
+        <div id="status" class="idle">Status: Disconnected</div>
+
+        <div class="button-group">
+            <button id="startRecording" disabled>🎙️ Start Recording</button>
+            <button id="stopRecording" disabled>⏹️ Stop Recording</button>
+        </div>
+
+        <div class="section">
+            <h3>📝 Transcript:</h3>
+            <div id="transcript">Waiting for audio...</div>
+        </div>
+
+        <div class="section">
+            <h3>🤖 Agent Response:</h3>
+            <div id="response">Waiting for response...</div>
+        </div>
+
+        <div class="error" id="error"></div>
+    </div>
+
+    <script>
+        const WS_URL = 'ws://localhost:8001/ws/session/test';
+        let ws = null;
+        let mediaRecorder = null;
+        let isRecording = false;
+        let audioChunks = [];
+
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const interruptBtn = document.getElementById('interruptBtn');
+        const startRecording = document.getElementById('startRecording');
+        const stopRecording = document.getElementById('stopRecording');
+        const status = document.getElementById('status');
+        const transcript = document.getElementById('transcript');
+        const response = document.getElementById('response');
+        const errorDiv = document.getElementById('error');
+
+        function updateStatus(mode) {
+            status.textContent = `Status: ${mode.charAt(0).toUpperCase() + mode.slice(1)}`;
+            status.className = mode;
+        }
+
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.classList.add('show');
+            setTimeout(() => errorDiv.classList.remove('show'), 5000);
+        }
+
+        // Connect WebSocket
+        connectBtn.onclick = () => {
+            ws = new WebSocket(WS_URL);
+            
+            ws.onopen = () => {
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                startRecording.disabled = false;
+                updateStatus('idle');
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'mode_change') {
+                    updateStatus(data.mode);
+                } else if (data.type === 'transcript') {
+                    transcript.textContent = data.text || 'No transcript';
+                } else if (data.type === 'agent_text') {
+                    response.textContent += data.text || '';
+                } else if (data.type === 'agent_audio' && data.audio && data.final) {
+                    // Complete WAV file - play immediately
+                    const audio = new Audio('data:audio/wav;base64,' + data.audio);
+                    audio.play();
+                } else if (data.type === 'error') {
+                    showError('Error: ' + data.message);
+                }
+            };
+            
+            ws.onerror = () => showError('WebSocket error. Is the service running?');
+            ws.onclose = () => {
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                startRecording.disabled = true;
+                stopRecording.disabled = true;
+                interruptBtn.disabled = true;
+                updateStatus('idle');
+            };
+        };
+
+        // Disconnect
+        disconnectBtn.onclick = () => {
+            if (ws) ws.close();
+            if (mediaRecorder && isRecording) mediaRecorder.stop();
+        };
+
+        // Interrupt
+        interruptBtn.onclick = () => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'interrupt' }));
+            }
+        };
+
+        // Start Recording
+        startRecording.onclick = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = async (event) => {
+                    if (event.data && event.data.size > 0 && ws && ws.readyState === WebSocket.OPEN) {
+                        const arrayBuffer = await event.data.arrayBuffer();
+                        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+                        ws.send(JSON.stringify({
+                            type: 'voice_audio_chunk',
+                            audio: base64
+                        }));
+                    }
+                };
+                
+                mediaRecorder.onstop = () => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'voice_audio_stream_end' }));
+                    }
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ type: 'voice_audio_stream_start' }));
+                    transcript.textContent = 'Recording...';
+                    response.textContent = '';
+                }
+                
+                mediaRecorder.start(100);
+                isRecording = true;
+                startRecording.disabled = true;
+                stopRecording.disabled = false;
+                interruptBtn.disabled = false;
+            } catch (error) {
+                showError('Microphone error: ' + error.message);
+            }
+        };
+
+        // Stop Recording
+        stopRecording.onclick = () => {
+            if (mediaRecorder && isRecording) {
+                mediaRecorder.stop();
+                isRecording = false;
+                startRecording.disabled = false;
+                stopRecording.disabled = true;
+                transcript.textContent = 'Processing...';
+            }
+        };
+    </script>
+</body>
+</html>
