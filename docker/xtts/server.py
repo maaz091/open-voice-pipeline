@@ -75,7 +75,7 @@ def load_xtts_model():
             raise RuntimeError(f"Required model file not found: {model_dir / file}")
     
     logger.info(f"Loading XTTS model from: {model_path}")
-    
+    logger.info(f"CUDA available: {torch.cuda.is_available()}, devices: {torch.cuda.device_count()}")
     # Determine device
     tts_device = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(f"Using device: {tts_device}")

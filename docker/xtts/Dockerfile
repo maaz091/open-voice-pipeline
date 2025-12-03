@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
 
 # Set environment variables
 ENV TTS_MODEL_PATH=/opt/xtts
@@ -17,11 +17,7 @@ RUN apt-get update && \
 # Set working directory
 WORKDIR /app
 
-# Install uv
-RUN pip install --no-cache-dir uv
-
-# Install PyTorch (large, but caches well)
-RUN pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+# IMPORTANT: Do NOT install CPU-only torch here; base image already has GPU torch/torchaudio
 
 # Install transformers (must be before TTS)
 RUN pip install --no-cache-dir "transformers==4.35.2"

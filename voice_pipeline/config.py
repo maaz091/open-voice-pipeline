@@ -9,7 +9,7 @@ class VoicePipelineSettings(BaseSettings):
     """Settings for the voice pipeline service."""
 
     model_config = SettingsConfigDict(
-        env_file=".env.voice", 
+        env_file=".env.voice",
         env_prefix="VOICE_"
     )
 
@@ -20,30 +20,23 @@ class VoicePipelineSettings(BaseSettings):
     )
 
     # Providers
-    stt_provider: Literal["gemini"] = Field(
-        default="gemini", description="Speech-to-text provider (currently only 'gemini' supported)."
+    stt_provider: Literal["whisper"] = Field(
+        default="whisper", description="Speech-to-text provider (Whisper)."
     )
     tts_provider: Literal["coqui"] = Field(
-        default="coqui", description="Text-to-speech provider (currently only 'coqui' supported)."
+        default="coqui", description="Text-to-speech provider (Coqui XTTS)."
     )
     llm_provider: Literal["runpod", "chat_service"] = Field(
         default="runpod", description="Default LLM provider key."
     )
 
-    # Gemini STT
-    gemini_api_key: str | None = Field(
-        default=None, description="API key for Google Gemini streaming STT."
+    # Whisper STT
+    whisper_model: str = Field(
+        default="base", description="Whisper model size ('tiny', 'base', 'small', 'medium', 'large')."
     )
-    gemini_model: str = Field(
-        default="gemini-1.5-flash", description="Gemini model used for STT."
+    whisper_language: str | None = Field(
+        default=None, description="Language code for Whisper (e.g., 'en', 'es', 'fr'). None = auto-detect."
     )
-    gemini_language_code: str = Field(
-        default="en-US", description="Primary language spoken by the user."
-    )
-    gemini_audio_mime_type: str = Field(
-        default="audio/wav", description="Mime type for audio chunks sent to Gemini."
-    )
-
 
     # LLM adapter
     chat_service_url: str = Field(
@@ -71,7 +64,7 @@ class VoicePipelineSettings(BaseSettings):
         description="Coqui XTTS HTTP endpoint address.",
     )
     tts_speaker_id: str | None = Field(
-        default=None, 
+        default=None,
         description="XTTS speaker ID (e.g., 'Ana Florence', 'Daisy Studious'). Uses default if not set."
     )
     tts_language: str = Field(
@@ -91,4 +84,3 @@ class VoicePipelineSettings(BaseSettings):
 def get_settings() -> VoicePipelineSettings:
     """Get the voice pipeline settings instance."""
     return VoicePipelineSettings()
-
